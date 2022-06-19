@@ -1,102 +1,395 @@
-import numpy as np
+#!/usr/bin/env python
+# coding: utf-8
+
 import torch
-def sigmod(x):
-    return 1 / (1 + np.exp(-x))
-def sigmodDerivative(x):
+import torchvision
+import torchvision.transforms as transforms
+import torch.nn as nn
+import torch.nn.functional as F
 
-    return np.multiply(x, np.subtract(1, x))
-def forward(weightsA, weightsB, bias):
-    # 前向传播
-    # 隐层
-    neth1 = inputX[0] * weightsA[0][0] + inputX[1] * weightsA[0][1] + bias[0]*weightsA[0][2]
-    outh1 = sigmod(neth1)
-    print("隐层第一个神经元", neth1, outh1)
+import matplotlib.pyplot as plt
+import numpy as np
 
-    neth2 = inputX[0] * weightsA[1][0] + inputX[1] * weightsA[1][1] + bias[1]*weightsA[1][2]
-    outh2 = sigmod(neth2)
-    print("隐层第二个神经元", neth2, outh2)
+transform = transforms.Compose(
+    [transforms.ToTensor(),
+     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-    # 输出层
-    neto1 = outh1 * weightsB[0] + outh2 * weightsB[1] + bias[2]* weightsB[2]
-    outo1 = sigmod(neto1)
-    print("输出层第一个神经元", neto1, outo1)
+batch_size = 4
+trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                        download=True, transform=transform)
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+                                          shuffle=True, num_workers=2)
+testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                       download=True, transform=transform)
+testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+                                         shuffle=False, num_workers=2)
 
-    # 向量化
-    outA = np.array([outh1,outh2,1])
-    outB = np.array([outo1])
+classes = ('plane', 'car', 'bird', 'cat',
+           'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
-    Etotal = 0.5 * np.subtract(y, outB) ** 2
-    print("误差值：", Etotal)
-    return outA, outB
+# functions to show an image
+def imshow(img):
+    img = img / 2 + 0.5     # unnormalize
+    npimg = img.numpy()
+    plt.imshow(np.transpose(npimg, (1, 2, 0)))
+    plt.show()
 
-def backpagration(outA, outB):
-    LR=0.1
-    # 反向传播
-    num1 = np.subtract(outB, y)
-    num2 = sigmodDerivative(outB)
-    inter1 = np.multiply(num1, num2)
-    inter2 = np.multiply(inter1, outA)
-    deltaB = np.multiply(num1, num2 ,outA)
-    print("deltaB：", deltaB)
+# get some random training images
+dataiter = iter(trainset)
+images, labels = next(dataiter)
 
-    deltaA = np.multiply(np.matmul(np.transpose(weightsB), deltaB), sigmodDerivative(outA))
-    print("deltaA：", deltaA)
 
-    deltaWB = np.matmul(deltaB.reshape(1, 1), outA.reshape(1, 3))
-    print("deltaWB：", deltaWB)
+# show images
+imshow(torchvision.utils.make_grid(images))
+# print labels
+print(' '.join(f'{classes[labels[j]]:5s}' for j in range(batch_size)))
 
-    deltaWA = np.matmul(deltaA.reshape(1, 1), inputX.reshape(1, 3))
-    print("deltaWA", deltaWA)
 
-    # 权重参数更新
-    weightsB_new = np.subtract(weightsB, deltaWB)
-    print("weightsB_new", weightsB_new)
+def softmax(vector):
+    e = np.exp(vector)
+    return e / e.sum()
 
-    bias[3] = np.subtract(bias[3], LR*deltaB[1])
-    print("biasB", bias[3])
-    bias[2] = np.subtract(bias[2], LR*deltaB[0])
-    print("biasB", bias[2])
+class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
 
-    weightsA_new = np.subtract(weightsA, deltaWA)
-    print("weightsA_new", weightsA_new)
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = torch.flatten(x, 1) # flatten all dimensions except batch
+        x = softmax(x)
 
-    bias[1] = np.subtract(bias[1], LR*deltaA[1])
-    print("biasA", bias[1])
-    bias[0] = np.subtract(bias[0], LR*deltaA[0])
-    print("biasA", bias[0])
-    print("all bias", bias)
+        return x
 
-    return weightsA_new, weightsB_new, bias
-if __name__=="__main__":
-    # # 初始化数据
-    # # 权重参数
-    # bias = np.array([1, 1, 1.0, 1.0])
-    # weightsA = np.array([[2.5, 1,1.5], [-1.5, -3,2.0]])
-    # weightsB = np.array([1.0,0.5,-1.0])
-    # # 期望值
-    # y = np.array([1])
-    # # 输入层
-    # inputX = np.array([0, 1.0])
-    #
-    # print("第一次前向传播")
-    # outA, outB = forward(weightsA, weightsB, bias)
-    # print("反向传播-参数更新")
-    # weightsA_new, weightsB_new, bias = backpagration(outA, outB)
-    # # 更新完毕
-    # # 验证权重参数--第二次前向传播
-    # print("第二次前向传播")
-    # forward(weightsA_new, weightsB_new, bias)
-    # ta = torch.tensor([1,2,3])
-    # torch.reshape(ta)
-    torch.nn.Module
+net = Net()
 
-    class A(object):
-        """"""
-        def __init__(self):
-            self.print()
 
-        def print(self):
-            """"""
-            print(1)
+# In[5]:
 
-    a = A()
+
+import torch.optim as optim
+
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+
+
+# In[6]:
+
+
+for epoch in range(2):  # loop over the dataset multiple times
+
+    running_loss = 0.0
+    for i, data in enumerate(trainloader, 0):
+        # get the inputs; data is a list of [inputs, labels]
+        inputs, labels = data
+
+        # zero the parameter gradients
+        optimizer.zero_grad()
+
+        # forward + backward + optimize
+        outputs = net(inputs)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+
+        # print statistics
+        running_loss += loss.item()
+        if i % 2000 == 1999:    # print every 2000 mini-batches
+            print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
+            running_loss = 0.0
+
+print('Finished Training')
+
+
+# In[ ]:
+
+
+PATH = './cifar_net.pth'
+torch.save(net.state_dict(), PATH)
+
+
+# In[ ]:
+
+
+dataiter = iter(testloader)
+images, labels = dataiter.next()
+
+# print images
+imshow(torchvision.utils.make_grid(images))
+print('GroundTruth: ', ' '.join(f'{classes[labels[j]]:5s}' for j in range(4)))
+
+
+# In[ ]:
+
+
+net = Net()
+net.load_state_dict(torch.load(PATH))
+
+
+# In[ ]:
+
+
+outputs = net(images)
+
+
+# In[ ]:
+
+
+_, predicted = torch.max(outputs, 1)
+
+print('Predicted: ', ' '.join(f'{classes[predicted[j]]:5s}'
+                              for j in range(4)))
+
+
+# In[ ]:
+
+
+correct = 0
+total = 0
+# since we're not training, we don't need to calculate the gradients for our outputs
+with torch.no_grad():
+    for data in testloader:
+        images, labels = data
+        # calculate outputs by running images through the network
+        outputs = net(images)
+        # the class with the highest energy is what we choose as prediction
+        _, predicted = torch.max(outputs.data, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+
+print(f'Accuracy of the network on the 10000 test images: {100 * correct // total} %')
+
+
+# In[ ]:
+
+
+# prepare to count predictions for each class
+correct_pred = {classname: 0 for classname in classes}
+total_pred = {classname: 0 for classname in classes}
+
+# again no gradients needed#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
+import torch
+import torchvision
+import torchvision.transforms as transforms
+
+
+# In[2]:
+
+
+transform = transforms.Compose(
+    [transforms.ToTensor(),
+     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+
+batch_size = 4
+
+trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                        download=True, transform=transform)
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+                                          shuffle=True, num_workers=2)
+
+testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                       download=True, transform=transform)
+testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+                                         shuffle=False, num_workers=2)
+
+classes = ('plane', 'car', 'bird', 'cat',
+           'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+
+
+# In[3]:
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+# functions to show an image
+
+
+def imshow(img):
+    img = img / 2 + 0.5     # unnormalize
+    npimg = img.numpy()
+    plt.imshow(np.transpose(npimg, (1, 2, 0)))
+    plt.show()
+
+
+# get some random training images
+dataiter = iter(trainloader)
+images, labels = dataiter.next()
+
+# print labels
+print(' '.join(f'{classes[labels[j]]:5s}' for j in range(batch_size)))
+
+
+# In[4]:
+
+
+import torch.nn as nn
+import torch.nn.functional as F
+
+def softmax(vector):
+    e = np.exp(vector)
+    return e / e.sum()
+
+class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = torch.flatten(x, 1) # flatten all dimensions except batch
+        x = softmax(x)
+
+        return x
+
+net = Net()
+
+
+# In[5]:
+
+
+import torch.optim as optim
+
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+
+
+# In[6]:
+
+
+for epoch in range(2):  # loop over the dataset multiple times
+
+    running_loss = 0.0
+    for i, data in enumerate(trainloader, 0):
+        # get the inputs; data is a list of [inputs, labels]
+        inputs, labels = data
+
+        # zero the parameter gradients
+        optimizer.zero_grad()
+
+        # forward + backward + optimize
+        outputs = net(inputs)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+
+        # print statistics
+        running_loss += loss.item()
+        if i % 2000 == 1999:    # print every 2000 mini-batches
+            print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
+            running_loss = 0.0
+
+print('Finished Training')
+
+
+# In[ ]:
+
+
+PATH = './cifar_net.pth'
+torch.save(net.state_dict(), PATH)
+
+
+# In[ ]:
+
+
+dataiter = iter(testloader)
+images, labels = dataiter.next()
+
+# print images
+imshow(torchvision.utils.make_grid(images))
+print('GroundTruth: ', ' '.join(f'{classes[labels[j]]:5s}' for j in range(4)))
+
+
+# In[ ]:
+
+
+net = Net()
+net.load_state_dict(torch.load(PATH))
+
+
+# In[ ]:
+
+
+outputs = net(images)
+
+
+# In[ ]:
+
+
+_, predicted = torch.max(outputs, 1)
+
+print('Predicted: ', ' '.join(f'{classes[predicted[j]]:5s}'
+                              for j in range(4)))
+
+
+# In[ ]:
+
+
+correct = 0
+total = 0
+# since we're not training, we don't need to calculate the gradients for our outputs
+with torch.no_grad():
+    for data in testloader:
+        images, labels = data
+        # calculate outputs by running images through the network
+        outputs = net(images)
+        # the class with the highest energy is what we choose as prediction
+        _, predicted = torch.max(outputs.data, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+
+print(f'Accuracy of the network on the 10000 test images: {100 * correct // total} %')
+
+
+# In[ ]:
+
+
+# prepare to count predictions for each class
+correct_pred = {classname: 0 for classname in classes}
+total_pred = {classname: 0 for classname in classes}
+
+# again no gradients needed
+with torch.no_grad():
+    for data in testloader:
+        images, labels = data
+        outputs = net(images)
+        _, predictions = torch.max(outputs, 1)
+        # collect the correct predictions for each class
+        for label, prediction in zip(labels, predictions):
+            if label == prediction:
+                correct_pred[classes[label]] += 1
+            total_pred[classes[label]] += 1
+
+
+# print accuracy for each class
+for classname, correct_count in correct_pred.items():
+    accuracy = 100 * float(correct_count) / total_pred[classname]
+    print(f'Accuracy for class: {classname:5s} is {accuracy:.1f} %')
+
+with torch.no_grad():
+    for data in testloader:
+        images, labels = data
+        outputs = net(images)
+        _, predictions = torch.max(outputs, 1)
+        # collect the correct predictions for each class
+        for label, prediction in zip(labels, predictions):
+            if label == prediction:
+                correct_pred[classes[label]] += 1
+            total_pred[classes[label]] += 1
+
+
+# print accuracy for each class
+for classname, correct_count in correct_pred.items():
+    accuracy = 100 * float(correct_count) / total_pred[classname]
+    print(f'Accuracy for class: {classname:5s} is {accuracy:.1f} %')
